@@ -1,1 +1,175 @@
-<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Open Sites</title></head><body><h1>Open Sites</h1><p>Скоро здесь будут сайты.</p></body></html>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open Sites — место, где рождаются идеи</title>
+<meta name="description" content="Живая вселенная из света. Двигайте мышью, касайтесь, создавайте.">
+<style>
+  :root { --bg:#05060f; --fg:#f3f1ff; --muted:#9a97c0; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { height:100%; background:var(--bg); color:var(--fg); overflow:hidden;
+    font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif; }
+  canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
+  .veil { position:fixed; inset:0; pointer-events:none;
+    background:radial-gradient(ellipse at center, transparent 30%, rgba(5,6,15,.75) 100%); }
+  main { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; text-align:center; padding:24px; pointer-events:none; }
+  .tag { letter-spacing:.5em; font-size:.75rem; color:var(--muted); text-transform:uppercase;
+    margin-bottom:1.4rem; animation:rise 1.6s .2s both; }
+  h1 { font-size:clamp(3rem,11vw,9rem); font-weight:800; line-height:.95; letter-spacing:-.04em;
+    background:linear-gradient(100deg,#7cf7ff,#a78bff 35%,#ff7ad9 65%,#ffd27a);
+    background-size:200% auto; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:rise 1.6s .4s both, shine 8s linear infinite;
+    filter:drop-shadow(0 0 40px rgba(167,139,255,.35)); }
+  #line { margin-top:2rem; min-height:2.2em; font-size:clamp(1.05rem,2.6vw,1.6rem); color:#d9d6ff;
+    font-weight:300; animation:rise 1.6s .8s both; }
+  #line::after { content:"▏"; margin-left:2px; animation:blink 1s steps(1) infinite; color:#7cf7ff; }
+  .hint { position:fixed; bottom:28px; left:0; right:0; text-align:center; font-size:.85rem;
+    color:var(--muted); letter-spacing:.08em; animation:rise 2s 1.6s both; }
+  .hint b { color:#fff; font-weight:600; }
+  .counter { position:fixed; top:22px; right:26px; font-size:.8rem; color:var(--muted);
+    font-variant-numeric:tabular-nums; letter-spacing:.1em; }
+  @keyframes rise { from { opacity:0; transform:translateY(24px); filter:blur(12px);} to { opacity:1; transform:none; } }
+  @keyframes shine { to { background-position:200% center; } }
+  @keyframes blink { 50% { opacity:0; } }
+  @media (prefers-reduced-motion:reduce){ *{animation-duration:.01s!important;} }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="veil"></div>
+<div class="counter" id="count">✦ 0</div>
+<main>
+  <div class="tag">Open Sites</div>
+  <h1>Создавай.<br>Удивляй.</h1>
+  <div id="line"></div>
+</main>
+<div class="hint"><b>Двигайте</b> курсором, чтобы вести свет · <b>нажмите</b>, чтобы создать вспышку · <b>удерживайте</b>, чтобы притянуть звёзды</div>
+
+<script>
+(() => {
+  const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+  let W, H, DPR;
+  const mouse = { x:-9999, y:-9999, down:false, tx:0, ty:0 };
+  let particles = [], bursts = [], t = 0, created = 0;
+  const countEl = document.getElementById('count');
+  const N = () => Math.min(1400, Math.floor(innerWidth * innerHeight / 1100));
+
+  function resize() {
+    DPR = Math.min(devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    cv.width = W * DPR; cv.height = H * DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    particles = Array.from({length:N()}, spawn);
+    mouse.tx = W/2; mouse.ty = H/2;
+  }
+  function spawn() {
+    return { x:Math.random()*W, y:Math.random()*H, vx:0, vy:0,
+      hue:180 + Math.random()*160, size:Math.random()*1.6+.4, life:Math.random()*200 };
+  }
+
+  // плавное «векторное поле» из синусов — вместо тяжёлого шума
+  function field(x, y) {
+    const a = Math.sin(x*.0028 + t*.0004) + Math.cos(y*.0032 - t*.0005)
+            + Math.sin((x+y)*.0017 + t*.0003);
+    return a * Math.PI;
+  }
+
+  function frame() {
+    t += 16;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(5,6,15,.14)';
+    ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation = 'lighter';
+
+    mouse.tx += (mouse.x - mouse.tx) * .12;
+    mouse.ty += (mouse.y - mouse.ty) * .12;
+
+    for (const p of particles) {
+      const ang = field(p.x, p.y);
+      p.vx += Math.cos(ang) * .06; p.vy += Math.sin(ang) * .06;
+
+      const dx = mouse.tx - p.x, dy = mouse.ty - p.y, d2 = dx*dx + dy*dy, d = Math.sqrt(d2) + .01;
+      if (d < 260) {
+        const f = (mouse.down ? 1.8 : -0.55) * (1 - d/260);
+        p.vx += dx/d * f; p.vy += dy/d * f;
+      }
+      for (const b of bursts) {
+        const bx = p.x - b.x, by = p.y - b.y, bd = Math.sqrt(bx*bx + by*by) + .01;
+        const ring = Math.abs(bd - b.r);
+        if (ring < 40) { const f = (1 - ring/40) * b.power; p.vx += bx/bd * f; p.vy += by/bd * f; }
+      }
+
+      p.vx *= .93; p.vy *= .93;
+      const px = p.x, py = p.y;
+      p.x += p.vx; p.y += p.vy; p.life++;
+      if (p.x<0) p.x=W; else if (p.x>W) p.x=0;
+      if (p.y<0) p.y=H; else if (p.y>H) p.y=0;
+
+      const sp = Math.min(Math.hypot(p.vx,p.vy), 6);
+      ctx.strokeStyle = `hsla(${(p.hue + t*.02) % 360},95%,${58 + sp*5}%,${.35 + sp*.1})`;
+      ctx.lineWidth = p.size + sp*.25;
+      ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(p.x - p.vx*.3, p.y - p.vy*.3); ctx.stroke();
+    }
+
+    // светящийся курсор
+    if (mouse.x > -999) {
+      const g = ctx.createRadialGradient(mouse.tx,mouse.ty,0,mouse.tx,mouse.ty,mouse.down?160:90);
+      g.addColorStop(0,'rgba(140,255,255,.28)'); g.addColorStop(.5,'rgba(167,139,255,.10)'); g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(mouse.tx,mouse.ty,mouse.down?160:90,0,7); ctx.fill();
+    }
+
+    // кольца-вспышки
+    for (const b of bursts) {
+      b.r += 7; b.power *= .965; b.a *= .965;
+      ctx.strokeStyle = `hsla(${b.h},100%,70%,${b.a})`; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,7); ctx.stroke();
+    }
+    bursts = bursts.filter(b => b.a > .02);
+    requestAnimationFrame(frame);
+  }
+
+  function burst(x, y) {
+    bursts.push({ x, y, r:0, power:2.6, a:.9, h:(t*.05) % 360 + 170 });
+    created++; countEl.textContent = '✦ ' + created;
+  }
+
+  const move = e => { const p = e.touches ? e.touches[0] : e; mouse.x = p.clientX; mouse.y = p.clientY; };
+  addEventListener('mousemove', move);
+  addEventListener('touchmove', move, { passive:true });
+  addEventListener('mousedown', e => { mouse.down = true; move(e); burst(e.clientX, e.clientY); });
+  addEventListener('touchstart', e => { mouse.down = true; move(e); burst(mouse.x, mouse.y); }, { passive:true });
+  addEventListener('mouseup', () => mouse.down = false);
+  addEventListener('touchend', () => mouse.down = false);
+  addEventListener('mouseleave', () => { mouse.x = mouse.y = -9999; });
+  addEventListener('resize', resize);
+
+  // печатающаяся строка вдохновения
+  const phrases = [
+    'Каждый большой сайт начинался с одной пустой страницы.',
+    'Ваша идея уже достаточно хороша — просто покажите её миру.',
+    'Здесь всё открыто. Всё возможно. Всё впереди.',
+    'Тот, кто создаёт, — уже изменил мир.',
+    'Сегодня хороший день, чтобы начать что-то невероятное.'
+  ];
+  const line = document.getElementById('line');
+  let pi = 0, ci = 0, del = false;
+  (function type() {
+    const s = phrases[pi];
+    line.textContent = s.slice(0, ci);
+    if (!del && ci < s.length) { ci++; setTimeout(type, 45); }
+    else if (!del) { del = true; setTimeout(type, 2400); }
+    else if (ci > 0) { ci -= 2; if (ci < 0) ci = 0; setTimeout(type, 18); }
+    else { del = false; pi = (pi + 1) % phrases.length; setTimeout(type, 400); }
+  })();
+
+  resize();
+  // приветственный салют
+  setTimeout(() => burst(W/2, H/2), 900);
+  created = 0; countEl.textContent = '✦ 0';
+  frame();
+})();
+</script>
+</body>
+</html>
